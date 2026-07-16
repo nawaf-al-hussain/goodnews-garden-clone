@@ -60,8 +60,8 @@ export function GardenVisualization({
 
     const initGraph = async () => {
       // Dynamic imports for 3D force graph (client-side only)
-      const ForceGraph3DModule = await import("3d-force-graph");
-      const ForceGraph3D = ForceGraph3DModule.default;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ForceGraph3D = (await import("3d-force-graph")).default as any;
 
       const Three = await import("three");
 
@@ -134,8 +134,10 @@ export function GardenVisualization({
           ctx.fillStyle = palette.center;
           ctx.fill();
 
-          const texture = new Three.CanvasTexture(canvas);
-          const material = new Three.SpriteMaterial({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const texture = new (Three as any).CanvasTexture(canvas);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const material = new (Three as any).SpriteMaterial({
             map: texture,
             transparent: true,
             opacity:
@@ -143,7 +145,8 @@ export function GardenVisualization({
                 ? 0.15
                 : 0.9,
           });
-          const sprite = new Three.Sprite(material);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sprite = new (Three as any).Sprite(material);
           sprite.scale.set(size, size, 1);
           return sprite;
         })
