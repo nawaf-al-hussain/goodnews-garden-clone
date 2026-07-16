@@ -20,8 +20,9 @@ export function TextStream({ nodes, onNodeClick }: TextStreamProps) {
             key={node.id}
             className="stream-label"
             onClick={() => onNodeClick(node)}
+            title={`${getCategoryEmoji(node.category)} ${node.title}`}
           >
-            {getCategoryEmoji(node.category)} {node.title.slice(0, 30)}
+            {getCategoryEmoji(node.category)} {node.title.slice(0, 40)}
           </div>
         ))}
       </div>

@@ -133,7 +133,12 @@ export default function Home() {
             onSpeedChange={handleSpeedChange}
             onToggleOrbit={handleToggleOrbit}
             onToggleZoom={handleToggleZoom}
-            onFitView={() => {}}
+            onFitView={() => {
+              // Call the fit view handler exposed by GardenVisualization
+              if (typeof window !== 'undefined' && (window as any).__gardenFitView) {
+                (window as any).__gardenFitView();
+              }
+            }}
           />
         )}
 

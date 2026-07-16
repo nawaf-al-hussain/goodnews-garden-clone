@@ -15,6 +15,7 @@ interface GardenVisualizationProps {
   speed: number;
   onNodeClick: (node: GardenNode) => void;
   onGraphReady: () => void;
+  onFitView?: () => void;
 }
 
 export function GardenVisualization({
@@ -25,12 +26,21 @@ export function GardenVisualization({
   speed,
   onNodeClick,
   onGraphReady,
+  onFitView,
 }: GardenVisualizationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph3DInstance | null>(null);
   const animationRef = useRef<number>(0);
   const orbitAngleRef = useRef(0);
   const prevNodeIdsRef = useRef<string>("");
+
+  // Default camera position (angled isometric view for 3D depth)
+  const DEFAULT_CAMERA = {
+    x: GRAPH_CONFIG.cameraDistance * 0.6,
+    y: GRAPH_CONFIG.cameraDistance * 0.5,
+    z: GRAPH_CONFIG.cameraDistance * 0.6,
+    lookAt: { x: 0, y: 0, z: 0 },
+  };
 
   // Initialize graph once
   useEffect(() => {
@@ -120,8 +130,8 @@ export function GardenVisualization({
           .d3AlphaDecay(0.02)
           .d3VelocityDecay(0.3);
 
-        // Camera
-        graph.cameraPosition({ x: 0, y: 0, z: GRAPH_CONFIG.cameraDistance });
+        // Camera — angled isometric view so 3D depth is immediately visible
+        graph.cameraPosition(DEFAULT_CAMERA);
 
         graphRef.current = graph;
         onGraphReady();
@@ -183,6 +193,15 @@ export function GardenVisualization({
       });
 
     if (THREE) {
+      // Dispose old Three.js objects to prevent GPU memory leaks
+      const oldObjects = graphRef.current.scene()?.children || [];
+      oldObjects.forEach((obj: any) => {
+        if (obj?.material) {
+          obj.material.dispose?.();
+          if (obj.material.map) obj.material.map.dispose?.();
+        }
+      });
+
       graphRef.current
         .nodeThreeObject((node: GardenNode) => {
           const palette = getFlowerPalette(node.category);
@@ -226,7 +245,7 @@ export function GardenVisualization({
     }
   }, [highlightedCategory]);
 
-  // Auto-orbit
+  // Auto-orbit with better 3D viewing angle
   useEffect(() => {
     if (!autoOrbit || !graphRef.current) return;
 
@@ -239,9 +258,9 @@ export function GardenVisualization({
 
       try {
         graphRef.current.cameraPosition({
-          x: distance * Math.sin(angle),
-          y: distance * 0.3,
-          z: distance * Math.cos(angle),
+          x: distance * Math.sin(angle) * 0.8,
+          y: distance * 0.45,
+          z: distance * Math.cos(angle) * 0.8,
           lookAt: { x: 0, y: 0, z: 0 },
         });
       } catch {
@@ -254,6 +273,21 @@ export function GardenVisualization({
     animationRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationRef.current);
   }, [autoOrbit, speed]);
+
+  // Expose fit view method via window so page.tsx can call it
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      if (graphRef.current) {
+        orbitAngleRef.current = 0;
+        graphRef.current.cameraPosition(DEFAULT_CAMERA);
+      }
+    };
+    (window as any).__gardenFitView = handler;
+    return () => {
+      delete (window as any).__gardenFitView;
+    };
+  }, []);
 
   return <div ref={containerRef} className="graph-container" />;
 }

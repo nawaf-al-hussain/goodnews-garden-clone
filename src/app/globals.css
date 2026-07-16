@@ -576,7 +576,7 @@
   right: var(--space-md);
   top: 110px;
   bottom: 80px;
-  width: 140px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   z-index: 10;
@@ -595,7 +595,7 @@
 .stream-label {
   font-size: 0.68rem;
   color: var(--text-muted);
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
   background: rgba(255, 252, 248, 0.5);
   white-space: nowrap;
@@ -603,6 +603,7 @@
   text-overflow: ellipsis;
   cursor: pointer;
   transition: all var(--transition-fast);
+  max-width: 100%;
 }
 
 .stream-label:hover {
