@@ -12,6 +12,7 @@ interface GardenVisualizationProps {
   visibleNodeIds: Set<string>;
   highlightedCategory: string | null;
   autoOrbit: boolean;
+  autoZoom: boolean;
   speed: number;
   onNodeClick: (node: GardenNode) => void;
   onGraphReady: () => void;
@@ -23,6 +24,7 @@ export function GardenVisualization({
   visibleNodeIds,
   highlightedCategory,
   autoOrbit,
+  autoZoom,
   speed,
   onNodeClick,
   onGraphReady,
@@ -31,8 +33,21 @@ export function GardenVisualization({
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraph3DInstance | null>(null);
   const animationRef = useRef<number>(0);
+  const zoomAnimationRef = useRef<number>(0);
   const orbitAngleRef = useRef(0);
   const prevNodeIdsRef = useRef<string>("");
+  // Use refs for values accessed inside closures to avoid stale captures
+  const highlightedCategoryRef = useRef<string | null>(null);
+  const onNodeClickRef = useRef(onNodeClick);
+
+  // Keep refs in sync with props
+  useEffect(() => {
+    highlightedCategoryRef.current = highlightedCategory;
+  }, [highlightedCategory]);
+
+  useEffect(() => {
+    onNodeClickRef.current = onNodeClick;
+  }, [onNodeClick]);
 
   // Default camera position (angled isometric view for 3D depth)
   const DEFAULT_CAMERA = {
@@ -40,6 +55,52 @@ export function GardenVisualization({
     y: GRAPH_CONFIG.cameraDistance * 0.5,
     z: GRAPH_CONFIG.cameraDistance * 0.6,
     lookAt: { x: 0, y: 0, z: 0 },
+  };
+
+  // Create a flower sprite for a node — shared helper
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const createFlowerSprite = (THREE: any, node: GardenNode) => {
+    const palette = getFlowerPalette(node.category);
+    const size = Math.max(2, (node.size || GRAPH_CONFIG.nodeBaseSize) * 1.5);
+    const currentHighlight = highlightedCategoryRef.current;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d")!;
+
+    // Glow
+    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, `${palette.glow}66`);
+    gradient.addColorStop(0.5, `${palette.petal}44`);
+    gradient.addColorStop(1, "transparent");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 64, 64);
+
+    // Petals
+    ctx.beginPath();
+    ctx.arc(32, 32, 16, 0, Math.PI * 2);
+    ctx.fillStyle = palette.petal;
+    ctx.fill();
+
+    // Center
+    ctx.beginPath();
+    ctx.arc(32, 32, 8, 0, Math.PI * 2);
+    ctx.fillStyle = palette.center;
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity:
+        currentHighlight && node.category !== currentHighlight
+          ? 0.15
+          : 0.9,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(size, size, 1);
+    return sprite;
   };
 
   // Initialize graph once
@@ -71,59 +132,21 @@ export function GardenVisualization({
           .nodeLabel("title")
           .nodeVal((node: GardenNode) => node.size || GRAPH_CONFIG.nodeBaseSize)
           .nodeColor((node: GardenNode) => {
-            if (highlightedCategory && node.category !== highlightedCategory) {
+            const currentHighlight = highlightedCategoryRef.current;
+            if (currentHighlight && node.category !== currentHighlight) {
               return `${GRAPH_CONFIG.defaultNodeColor}44`;
             }
             return getFlowerPalette(node.category).petal;
           })
           .nodeOpacity(GRAPH_CONFIG.nodeOpacityActive)
           .nodeThreeObject((node: GardenNode) => {
-            const palette = getFlowerPalette(node.category);
-            const size = Math.max(2, (node.size || GRAPH_CONFIG.nodeBaseSize) * 1.5);
-
-            const canvas = document.createElement("canvas");
-            canvas.width = 64;
-            canvas.height = 64;
-            const ctx = canvas.getContext("2d")!;
-
-            // Glow
-            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-            gradient.addColorStop(0, `${palette.glow}66`);
-            gradient.addColorStop(0.5, `${palette.petal}44`);
-            gradient.addColorStop(1, "transparent");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 64, 64);
-
-            // Petals
-            ctx.beginPath();
-            ctx.arc(32, 32, 16, 0, Math.PI * 2);
-            ctx.fillStyle = palette.petal;
-            ctx.fill();
-
-            // Center
-            ctx.beginPath();
-            ctx.arc(32, 32, 8, 0, Math.PI * 2);
-            ctx.fillStyle = palette.center;
-            ctx.fill();
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.SpriteMaterial({
-              map: texture,
-              transparent: true,
-              opacity:
-                highlightedCategory && node.category !== highlightedCategory
-                  ? 0.15
-                  : 0.9,
-            });
-            const sprite = new THREE.Sprite(material);
-            sprite.scale.set(size, size, 1);
-            return sprite;
+            return createFlowerSprite(THREE, node);
           })
           .linkColor(() => GRAPH_CONFIG.linkColor)
           .linkOpacity(GRAPH_CONFIG.linkOpacity)
           .linkWidth(GRAPH_CONFIG.linkWidth)
           .onNodeClick((node: GardenNode) => {
-            onNodeClick(node);
+            onNodeClickRef.current(node);
           })
           .enableNodeDrag(false)
           .cooldownTicks(200)
@@ -204,43 +227,7 @@ export function GardenVisualization({
 
       graphRef.current
         .nodeThreeObject((node: GardenNode) => {
-          const palette = getFlowerPalette(node.category);
-          const size = Math.max(2, (node.size || GRAPH_CONFIG.nodeBaseSize) * 1.5);
-
-          const canvas = document.createElement("canvas");
-          canvas.width = 64;
-          canvas.height = 64;
-          const ctx = canvas.getContext("2d")!;
-
-          const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-          gradient.addColorStop(0, `${palette.glow}66`);
-          gradient.addColorStop(0.5, `${palette.petal}44`);
-          gradient.addColorStop(1, "transparent");
-          ctx.fillStyle = gradient;
-          ctx.fillRect(0, 0, 64, 64);
-
-          ctx.beginPath();
-          ctx.arc(32, 32, 16, 0, Math.PI * 2);
-          ctx.fillStyle = palette.petal;
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(32, 32, 8, 0, Math.PI * 2);
-          ctx.fillStyle = palette.center;
-          ctx.fill();
-
-          const texture = new THREE.CanvasTexture(canvas);
-          const material = new THREE.SpriteMaterial({
-            map: texture,
-            transparent: true,
-            opacity:
-              highlightedCategory && node.category !== highlightedCategory
-                ? 0.15
-                : 0.9,
-          });
-          const sprite = new THREE.Sprite(material);
-          sprite.scale.set(size, size, 1);
-          return sprite;
+          return createFlowerSprite(THREE, node);
         });
     }
   }, [highlightedCategory]);
@@ -273,6 +260,37 @@ export function GardenVisualization({
     animationRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationRef.current);
   }, [autoOrbit, speed]);
+
+  // Auto-zoom — slowly oscillate camera distance
+  useEffect(() => {
+    if (!autoZoom || !graphRef.current) return;
+
+    let zoomAngle = 0;
+    const baseDistance = GRAPH_CONFIG.cameraDistance * 0.75;
+    const zoomAmplitude = GRAPH_CONFIG.cameraDistance * 0.25;
+
+    const animateZoom = () => {
+      if (!graphRef.current || !autoZoom) return;
+
+      zoomAngle += 0.0003 * speed;
+      const currentDistance = baseDistance + zoomAmplitude * Math.sin(zoomAngle);
+
+      try {
+        graphRef.current.cameraPosition(
+          { x: 0, y: 0, z: currentDistance },
+          { x: 0, y: 0, z: 0 }, // lookAt
+          100 // transition duration ms
+        );
+      } catch {
+        // graph may have been destroyed
+      }
+
+      zoomAnimationRef.current = requestAnimationFrame(animateZoom);
+    };
+
+    zoomAnimationRef.current = requestAnimationFrame(animateZoom);
+    return () => cancelAnimationFrame(zoomAnimationRef.current);
+  }, [autoZoom, speed]);
 
   // Expose fit view method via window so page.tsx can call it
   useEffect(() => {

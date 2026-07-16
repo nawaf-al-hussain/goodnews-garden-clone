@@ -43,7 +43,9 @@ export function InfoPanel({ node, onClose }: InfoPanelProps) {
       </div>
 
       <div className="info-preview">
-        {node.narasi_preview.slice(0, 200)}...
+        {node.narasi_preview.length > 200
+          ? `${node.narasi_preview.slice(0, 200)}...`
+          : node.narasi_preview}
       </div>
     </div>
   );

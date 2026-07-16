@@ -104,6 +104,7 @@ export default function Home() {
           visibleNodeIds={visibleNodeIds}
           highlightedCategory={highlightedCategory}
           autoOrbit={autoOrbit}
+          autoZoom={autoZoom}
           speed={speed}
           onNodeClick={handleNodeClick}
           onGraphReady={handleGraphReady}
@@ -144,6 +145,11 @@ export default function Home() {
 
         {/* Credits */}
         <Credits />
+
+        {/* Navigation Hints */}
+        <div className="nav-info">
+          Left-click: rotate · Mouse-wheel/middle-click: zoom · Right-click: pan
+        </div>
 
         {/* Info Panel */}
         {selectedNode && (
