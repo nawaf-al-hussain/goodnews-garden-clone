@@ -47,7 +47,7 @@ export function GraphTooltip({ node, x, y }: GraphTooltipProps) {
 export function useTooltip() {
   const [tooltipNode, setTooltipNode] = useState<GardenNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const showTooltip = (node: GardenNode | null, x?: number, y?: number) => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
