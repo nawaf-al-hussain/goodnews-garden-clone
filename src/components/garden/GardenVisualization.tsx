@@ -39,12 +39,19 @@ export function GardenVisualization({
 
     const initGraph = async () => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ForceGraph3D = (await import("3d-force-graph")).default as any;
-
-        // three.js uses named exports, import the whole module
+        // 3d-force-graph requires THREE on window. Load THREE first.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const THREE = await import("three") as any;
+
+        // Make THREE available globally for 3d-force-graph
+        if (typeof window !== "undefined") {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).THREE = THREE;
+        }
+
+        // Now load 3d-force-graph (it reads window.THREE)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ForceGraph3D = (await import("3d-force-graph")).default as any;
 
         if (destroyed || !containerRef.current) return;
 
@@ -164,57 +171,59 @@ export function GardenVisualization({
   // Update highlighted category
   useEffect(() => {
     if (!graphRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const THREE = (typeof window !== "undefined") ? (window as any).THREE : null;
+
     graphRef.current
       .nodeColor((node: GardenNode) => {
         if (highlightedCategory && node.category !== highlightedCategory) {
           return `${GRAPH_CONFIG.defaultNodeColor}44`;
         }
         return getFlowerPalette(node.category).petal;
-      })
-      .nodeThreeObject((node: GardenNode) => {
-        const palette = getFlowerPalette(node.category);
-        const size = Math.max(2, (node.size || GRAPH_CONFIG.nodeBaseSize) * 1.5);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const THREE = (graphRef.current as any)?.__three__;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = 64;
-        canvas.height = 64;
-        const ctx = canvas.getContext("2d")!;
-
-        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-        gradient.addColorStop(0, `${palette.glow}66`);
-        gradient.addColorStop(0.5, `${palette.petal}44`);
-        gradient.addColorStop(1, "transparent");
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 64, 64);
-
-        ctx.beginPath();
-        ctx.arc(32, 32, 16, 0, Math.PI * 2);
-        ctx.fillStyle = palette.petal;
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(32, 32, 8, 0, Math.PI * 2);
-        ctx.fillStyle = palette.center;
-        ctx.fill();
-
-        // Use basic sphere if THREE not available
-        if (!THREE) return null;
-
-        const texture = new THREE.CanvasTexture(canvas);
-        const material = new THREE.SpriteMaterial({
-          map: texture,
-          transparent: true,
-          opacity:
-            highlightedCategory && node.category !== highlightedCategory
-              ? 0.15
-              : 0.9,
-        });
-        const sprite = new THREE.Sprite(material);
-        sprite.scale.set(size, size, 1);
-        return sprite;
       });
+
+    if (THREE) {
+      graphRef.current
+        .nodeThreeObject((node: GardenNode) => {
+          const palette = getFlowerPalette(node.category);
+          const size = Math.max(2, (node.size || GRAPH_CONFIG.nodeBaseSize) * 1.5);
+
+          const canvas = document.createElement("canvas");
+          canvas.width = 64;
+          canvas.height = 64;
+          const ctx = canvas.getContext("2d")!;
+
+          const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+          gradient.addColorStop(0, `${palette.glow}66`);
+          gradient.addColorStop(0.5, `${palette.petal}44`);
+          gradient.addColorStop(1, "transparent");
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, 64, 64);
+
+          ctx.beginPath();
+          ctx.arc(32, 32, 16, 0, Math.PI * 2);
+          ctx.fillStyle = palette.petal;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(32, 32, 8, 0, Math.PI * 2);
+          ctx.fillStyle = palette.center;
+          ctx.fill();
+
+          const texture = new THREE.CanvasTexture(canvas);
+          const material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            opacity:
+              highlightedCategory && node.category !== highlightedCategory
+                ? 0.15
+                : 0.9,
+          });
+          const sprite = new THREE.Sprite(material);
+          sprite.scale.set(size, size, 1);
+          return sprite;
+        });
+    }
   }, [highlightedCategory]);
 
   // Auto-orbit
