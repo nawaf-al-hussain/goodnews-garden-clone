@@ -68,6 +68,9 @@ export function GardenVisualization({
   const onNodeClickRef = useRef(onNodeClick);
   useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
 
+  const onGraphReadyRef = useRef(onGraphReady);
+  useEffect(() => { onGraphReadyRef.current = onGraphReady; }, [onGraphReady]);
+
   // ── Create flower canvas texture ───────────────────────────────
   const createFlowerCanvas = useCallback(
     (category: string, bloomProgress: number, isGlowing: boolean, glowProgress: number) => {
@@ -262,7 +265,7 @@ export function GardenVisualization({
 
       graphRef.current = graph;
 
-      // Set initial empty data so engine initializes
+      // Set initial seed data so engine initializes
       if (data && data.nodes.length > 0) {
         const seedData = {
           nodes: data.nodes.slice(0, 3).map((n: GardenNode) => ({ ...n })),
@@ -271,6 +274,15 @@ export function GardenVisualization({
         graphDataRef.current = seedData;
         graph.graphData(seedData);
       }
+
+      // Signal ready after the engine has initialized
+      // Use onEngineStop or a small delay to ensure the graph is truly ready
+      setTimeout(() => {
+        if (!destroyed && !readyCalledRef.current) {
+          readyCalledRef.current = true;
+          onGraphReadyRef.current();
+        }
+      }, 800);
     });
 
     return () => {
@@ -340,13 +352,7 @@ export function GardenVisualization({
 
     graphDataRef.current = newGraphData;
     graph.graphData(newGraphData);
-
-    // Notify ready on first real data load (not the seed)
-    if (!readyCalledRef.current && visibleNodeIds.size > 0) {
-      readyCalledRef.current = true;
-      setTimeout(() => onGraphReady(), 500);
-    }
-  }, [data, visibleNodeIds, onGraphReady]);
+  }, [data, visibleNodeIds]);
 
   // ── Glow animation loop (~10fps, matching original) ────────────
   useEffect(() => {
