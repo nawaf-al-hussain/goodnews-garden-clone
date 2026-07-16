@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import type { GardenData, GardenNode } from "@/types/garden";
 import { useGardenState } from "@/hooks/useGardenState";
 import { LoadingScreen } from "@/components/garden/LoadingScreen";
@@ -13,18 +13,13 @@ import { Credits } from "@/components/garden/Credits";
 import { TextStream } from "@/components/garden/TextStream";
 import { GardenVisualization } from "@/components/garden/GardenVisualization";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ForceGraph3DInstance = any;
-
 export default function Home() {
   const [data, setData] = useState<GardenData | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const graphRef = useRef<ForceGraph3DInstance | null>(null);
+  const [showLoading, setShowLoading] = useState(true);
 
   const {
     isPlaying,
-    currentDateIndex,
     speed,
     autoOrbit,
     autoZoom,
@@ -34,7 +29,8 @@ export default function Home() {
     linkCount,
     currentDate,
     progress,
-    isLoading,
+    graphReady,
+    visibleNodeIds,
     handlePlayPause,
     handleReset,
     handleSpeedChange,
@@ -42,9 +38,8 @@ export default function Home() {
     handleToggleZoom,
     handleCategoryClick,
     handleNodeClick,
-    handleNodeHover,
     handleCloseInfo,
-    handleVisibleCountsUpdate,
+    handleGraphReady,
   } = useGardenState({ data });
 
   // Load network data
@@ -55,7 +50,6 @@ export default function Home() {
         if (!response.ok) throw new Error("Failed to load data");
         const json = (await response.json()) as GardenData;
         setData(json);
-        setDataLoaded(true);
       } catch (err) {
         console.error("Error loading garden data:", err);
         setLoadError(true);
@@ -65,11 +59,13 @@ export default function Home() {
     loadData();
   }, []);
 
-  const handleFitView = () => {
-    if (graphRef.current) {
-      graphRef.current.zoomToFit(400, 50);
+  // Hide loading screen after a delay when graph is ready
+  useEffect(() => {
+    if (graphReady) {
+      const timer = setTimeout(() => setShowLoading(false), 1200);
+      return () => clearTimeout(timer);
     }
-  };
+  }, [graphReady]);
 
   return (
     <div
@@ -81,51 +77,52 @@ export default function Home() {
       }}
     >
       {/* Loading Screen */}
-      {(isLoading || !dataLoaded) && !loadError && <LoadingScreen />}
+      {showLoading && !loadError && <LoadingScreen />}
 
       {/* Error State */}
       {loadError && (
-        <div id="loading-screen">
-          <h2 className="loader-text" style={{ color: "#e57373" }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "linear-gradient(165deg, #fdfcfa 0%, #fef6ee 40%, #f6faf6 100%)",
+          }}
+        >
+          <h2 style={{ color: "#e57373", fontSize: "1.1rem" }}>
             Error Loading Garden Data
           </h2>
         </div>
       )}
 
       {/* Graph Container */}
-      {dataLoaded && data && (
+      {data && (
         <GardenVisualization
           data={data}
-          currentDateIndex={currentDateIndex}
-          isPlaying={isPlaying}
-          speed={speed}
-          autoOrbit={autoOrbit}
+          visibleNodeIds={visibleNodeIds}
           highlightedCategory={highlightedCategory}
+          autoOrbit={autoOrbit}
+          speed={speed}
           onNodeClick={handleNodeClick}
-          onNodeHover={handleNodeHover}
-          onVisibleCountsUpdate={handleVisibleCountsUpdate}
-          graphRef={graphRef}
+          onGraphReady={handleGraphReady}
         />
       )}
 
       {/* UI Overlay */}
       <div
-        id="ui-overlay"
         className="absolute inset-0 z-10 pointer-events-none"
         style={{ pointerEvents: "none" }}
       >
         {/* Title Bar */}
-        {dataLoaded && (
-          <TitleBar nodeCount={nodeCount} linkCount={linkCount} />
-        )}
+        {data && <TitleBar nodeCount={nodeCount} linkCount={linkCount} />}
 
         {/* Date Display */}
-        {dataLoaded && (
-          <DateDisplay currentDate={currentDate} progress={progress} />
-        )}
+        {data && <DateDisplay currentDate={currentDate} progress={progress} />}
 
         {/* Controls */}
-        {dataLoaded && (
+        {data && (
           <ControlsPanel
             isPlaying={isPlaying}
             speed={speed}
@@ -136,7 +133,7 @@ export default function Home() {
             onSpeedChange={handleSpeedChange}
             onToggleOrbit={handleToggleOrbit}
             onToggleZoom={handleToggleZoom}
-            onFitView={handleFitView}
+            onFitView={() => {}}
           />
         )}
 
@@ -149,7 +146,7 @@ export default function Home() {
         )}
 
         {/* Legend Panel */}
-        {dataLoaded && (
+        {data && (
           <LegendPanel
             highlightedCategory={highlightedCategory}
             onCategoryClick={handleCategoryClick}
@@ -157,9 +154,9 @@ export default function Home() {
         )}
 
         {/* Text Stream */}
-        {dataLoaded && data && (
+        {data && nodeCount > 0 && (
           <TextStream
-            nodes={data.nodes.slice(0, Math.max(0, nodeCount))}
+            nodes={data.nodes.slice(0, nodeCount)}
             onNodeClick={handleNodeClick as (node: GardenNode) => void}
           />
         )}

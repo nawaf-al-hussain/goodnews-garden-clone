@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import type { GardenData, GardenNode } from "@/types/garden";
 
 interface UseGardenStateProps {
@@ -15,51 +15,65 @@ export function useGardenState({ data }: UseGardenStateProps) {
   const [autoZoom, setAutoZoom] = useState(true);
   const [highlightedCategory, setHighlightedCategory] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GardenNode | null>(null);
-  const [nodeCount, setNodeCount] = useState(0);
-  const [linkCount, setLinkCount] = useState(0);
   const [currentDate, setCurrentDate] = useState("planting...");
   const [progress, setProgress] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [graphReady, setGraphReady] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const uniqueDatesRef = useRef<string[]>([]);
 
-  // Compute unique dates from data
-  useEffect(() => {
-    if (!data) return;
-
+  // Compute unique sorted dates
+  const uniqueDates = useMemo(() => {
+    if (!data) return [];
     const dateSet = new Set<string>();
     data.nodes.forEach((n) => dateSet.add(n.date));
-    uniqueDatesRef.current = Array.from(dateSet).sort((a, b) => {
+    return Array.from(dateSet).sort((a, b) => {
       const [da, ma, ya] = a.split("/").map(Number);
       const [db, mb, yb] = b.split("/").map(Number);
-      return new Date(ya, ma - 1, da).getTime() - new Date(yb, mb - 1, db).getTime();
+      return (
+        new Date(ya, ma - 1, da).getTime() -
+        new Date(yb, mb - 1, db).getTime()
+      );
     });
-
-    setIsLoading(false);
   }, [data]);
 
-  // Play/pause animation
+  // Compute which node IDs are currently visible
+  const visibleNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!data || currentDateIndex < 0) return ids;
+    for (let i = 0; i <= Math.min(currentDateIndex, uniqueDates.length - 1); i++) {
+      const date = uniqueDates[i];
+      data.nodes.forEach((n) => {
+        if (n.date === date) ids.add(n.id);
+      });
+    }
+    return ids;
+  }, [data, currentDateIndex, uniqueDates]);
+
+  // Visible counts
+  const nodeCount = visibleNodeIds.size;
+
+  const linkCount = useMemo(() => {
+    if (!data || visibleNodeIds.size === 0) return 0;
+    return data.links.filter((l) => {
+      const srcId = typeof l.source === "object" && l.source ? (l.source as GardenNode).id : String(l.source);
+      const tgtId = typeof l.target === "object" && l.target ? (l.target as GardenNode).id : String(l.target);
+      return visibleNodeIds.has(srcId) && visibleNodeIds.has(tgtId);
+    }).length;
+  }, [data, visibleNodeIds]);
+
+  // Auto-play animation
   useEffect(() => {
-    if (!isPlaying || !data) return;
+    if (!isPlaying || !data || !graphReady) return;
 
     const tick = () => {
       setCurrentDateIndex((prev) => {
         const next = prev + 1;
-        if (next >= uniqueDatesRef.current.length) {
+        if (next >= uniqueDates.length) {
           setIsPlaying(false);
           return prev;
         }
-
-        // Update current date
-        const dateStr = uniqueDatesRef.current[next];
-        setCurrentDate(dateStr);
-
-        // Update progress
-        setProgress(
-          ((next + 1) / uniqueDatesRef.current.length) * 100
-        );
-
+        setCurrentDate(uniqueDates[next]);
+        setProgress(((next + 1) / uniqueDates.length) * 100);
         return next;
       });
     };
@@ -75,19 +89,18 @@ export function useGardenState({ data }: UseGardenStateProps) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isPlaying, speed, data]);
+  }, [isPlaying, speed, data, graphReady, uniqueDates]);
 
   const handlePlayPause = useCallback(() => {
+    if (!graphReady) return;
     setIsPlaying((prev) => !prev);
-  }, []);
+  }, [graphReady]);
 
   const handleReset = useCallback(() => {
     setIsPlaying(false);
     setCurrentDateIndex(-1);
     setCurrentDate("planting...");
     setProgress(0);
-    setNodeCount(0);
-    setLinkCount(0);
   }, []);
 
   const handleSpeedChange = useCallback((newSpeed: number) => {
@@ -107,21 +120,27 @@ export function useGardenState({ data }: UseGardenStateProps) {
   }, []);
 
   const handleNodeClick = useCallback((node: GardenNode) => {
-    setSelectedNode(node);
+    setSelectedNode((prev) => (prev?.id === node.id ? null : node));
   }, []);
 
   const handleNodeHover = useCallback((_node: GardenNode | null) => {
-    // Could add hover effects here
+    // Future: tooltip
   }, []);
 
   const handleCloseInfo = useCallback(() => {
     setSelectedNode(null);
   }, []);
 
-  const handleVisibleCountsUpdate = useCallback((nodes: number, links: number) => {
-    setNodeCount(nodes);
-    setLinkCount(links);
-  }, []);
+  const handleGraphReady = useCallback(() => {
+    setGraphReady(true);
+    // Auto-start playing when graph is ready
+    setIsPlaying(true);
+    setCurrentDateIndex(0);
+    if (uniqueDates.length > 0) {
+      setCurrentDate(uniqueDates[0]);
+      setProgress((1 / uniqueDates.length) * 100);
+    }
+  }, [uniqueDates]);
 
   return {
     // State
@@ -136,7 +155,8 @@ export function useGardenState({ data }: UseGardenStateProps) {
     linkCount,
     currentDate,
     progress,
-    isLoading,
+    graphReady,
+    visibleNodeIds,
 
     // Actions
     handlePlayPause,
@@ -148,6 +168,6 @@ export function useGardenState({ data }: UseGardenStateProps) {
     handleNodeClick,
     handleNodeHover,
     handleCloseInfo,
-    handleVisibleCountsUpdate,
+    handleGraphReady,
   };
 }
