@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import type { GardenData, GardenNode } from "@/types/garden";
 import { useGardenState } from "@/hooks/useGardenState";
 import { LoadingScreen } from "@/components/garden/LoadingScreen";
@@ -11,7 +12,18 @@ import { LegendPanel } from "@/components/garden/LegendPanel";
 import { InfoPanel } from "@/components/garden/InfoPanel";
 import { Credits } from "@/components/garden/Credits";
 import { TextStream } from "@/components/garden/TextStream";
-import { GardenVisualization } from "@/components/garden/GardenVisualization";
+
+// Dynamically import the 3D visualization — requires browser APIs (window, WebGL)
+const GardenVisualization = dynamic(
+  () =>
+    import("@/components/garden/GardenVisualization").then(
+      (mod) => mod.GardenVisualization
+    ),
+  {
+    ssr: false,
+    loading: () => <div className="graph-container" />,
+  }
+) as any;
 
 export default function Home() {
   const [data, setData] = useState<GardenData | null>(null);
@@ -135,7 +147,6 @@ export default function Home() {
             onToggleOrbit={handleToggleOrbit}
             onToggleZoom={handleToggleZoom}
             onFitView={() => {
-              // Call the fit view handler exposed by GardenVisualization
               if (typeof window !== 'undefined' && (window as any).__gardenFitView) {
                 (window as any).__gardenFitView();
               }

@@ -20,6 +20,16 @@ export function useGardenState({ data }: UseGardenStateProps) {
   const [graphReady, setGraphReady] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPlayingRef = useRef(false);
+  const speedRef = useRef(speed);
+
+  // Keep refs in sync
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
 
   // Compute unique sorted dates
   const uniqueDates = useMemo(() => {
@@ -61,9 +71,11 @@ export function useGardenState({ data }: UseGardenStateProps) {
     }).length;
   }, [data, visibleNodeIds]);
 
-  // Auto-play animation
+  // Auto-play animation — matches original's 800ms base interval at 1x speed
   useEffect(() => {
     if (!isPlaying || !data || !graphReady) return;
+
+    const DATE_DURATION = 800; // ms per date tick, matching original
 
     const tick = () => {
       setCurrentDateIndex((prev) => {
@@ -78,18 +90,19 @@ export function useGardenState({ data }: UseGardenStateProps) {
       });
     };
 
-    const interval = Math.max(200, 1500 / speed);
+    const interval = Math.max(100, DATE_DURATION / speedRef.current);
+
     timerRef.current = setTimeout(function repeat() {
+      if (!isPlayingRef.current) return;
       tick();
-      if (isPlaying) {
-        timerRef.current = setTimeout(repeat, interval);
-      }
+      const nextInterval = Math.max(100, DATE_DURATION / speedRef.current);
+      timerRef.current = setTimeout(repeat, nextInterval);
     }, interval);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isPlaying, speed, data, graphReady, uniqueDates]);
+  }, [isPlaying, data, graphReady, uniqueDates]);
 
   const handlePlayPause = useCallback(() => {
     if (!graphReady) return;
@@ -123,23 +136,21 @@ export function useGardenState({ data }: UseGardenStateProps) {
     setSelectedNode((prev) => (prev?.id === node.id ? null : node));
   }, []);
 
-  const handleNodeHover = useCallback((_node: GardenNode | null) => {
-    // Future: tooltip
-  }, []);
-
   const handleCloseInfo = useCallback(() => {
     setSelectedNode(null);
   }, []);
 
   const handleGraphReady = useCallback(() => {
     setGraphReady(true);
-    // Auto-start playing when graph is ready
-    setIsPlaying(true);
-    setCurrentDateIndex(0);
-    if (uniqueDates.length > 0) {
-      setCurrentDate(uniqueDates[0]);
-      setProgress((1 / uniqueDates.length) * 100);
-    }
+    // Auto-start playing when graph is ready (matching original's 1s delay)
+    setTimeout(() => {
+      setIsPlaying(true);
+      setCurrentDateIndex(0);
+      if (uniqueDates.length > 0) {
+        setCurrentDate(uniqueDates[0]);
+        setProgress((1 / uniqueDates.length) * 100);
+      }
+    }, 1000);
   }, [uniqueDates]);
 
   return {
@@ -166,7 +177,6 @@ export function useGardenState({ data }: UseGardenStateProps) {
     handleToggleZoom,
     handleCategoryClick,
     handleNodeClick,
-    handleNodeHover,
     handleCloseInfo,
     handleGraphReady,
   };
