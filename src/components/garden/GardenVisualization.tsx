@@ -45,6 +45,7 @@ export function GardenVisualization({
   const animationRef = useRef<number>(0);
   const orbitAngleRef = useRef(0);
   const zoomAngleRef = useRef(0);
+  const readyCalledRef = useRef(false);
 
   // Default camera position (angled isometric view for 3D depth)
   const DEFAULT_CAMERA = useMemo(
@@ -57,20 +58,44 @@ export function GardenVisualization({
     []
   );
 
-  // Prepare visible graph data — reuse node objects so positions are preserved
+  // Prepare visible graph data
+  // When visibleNodeIds is empty (currentDateIndex = -1, initial state),
+  // pass a small seed dataset so the ForceGraph3D engine initializes
+  // and onEngineInit fires. This breaks the deadlock where empty data
+  // → no engine init → no graphReady → no timeline start.
   const graphData = useMemo(() => {
-    const visibleNodes = data.nodes.filter((n: GardenNode) => visibleNodeIds.has(n.id));
-    const visibleLinks = data.links.filter((l: any) => {
-      const srcId =
-        typeof l.source === "object" && l.source
-          ? (l.source as GardenNode).id
-          : l.source;
-      const tgtId =
-        typeof l.target === "object" && l.target
-          ? (l.target as GardenNode).id
-          : l.target;
-      return visibleNodeIds.has(String(srcId)) && visibleNodeIds.has(String(tgtId));
-    });
+    const isEmpty = visibleNodeIds.size === 0;
+
+    let visibleNodes: GardenNode[];
+    let visibleLinks: any[];
+
+    if (isEmpty && data.nodes.length > 0) {
+      // Seed: use only the first few nodes so the engine initializes
+      // but the graph appears mostly empty (like the original site)
+      visibleNodes = data.nodes.slice(0, 3);
+      visibleLinks = [];
+    } else if (isEmpty) {
+      visibleNodes = [];
+      visibleLinks = [];
+    } else {
+      visibleNodes = data.nodes.filter((n: GardenNode) =>
+        visibleNodeIds.has(n.id)
+      );
+      visibleLinks = data.links.filter((l: any) => {
+        const srcId =
+          typeof l.source === "object" && l.source
+            ? (l.source as GardenNode).id
+            : l.source;
+        const tgtId =
+          typeof l.target === "object" && l.target
+            ? (l.target as GardenNode).id
+            : l.target;
+        return (
+          visibleNodeIds.has(String(srcId)) &&
+          visibleNodeIds.has(String(tgtId))
+        );
+      });
+    }
 
     return {
       nodes: visibleNodes.map((n: GardenNode) => ({ ...n })),
@@ -232,12 +257,16 @@ export function GardenVisualization({
     };
   }, [DEFAULT_CAMERA]);
 
-  // Notify parent when graph is ready (engine init)
+  // Handle engine init — set camera and notify parent
   const handleEngineInit = useCallback(() => {
     if (fgRef.current) {
       fgRef.current.cameraPosition(DEFAULT_CAMERA);
     }
-    onGraphReady();
+    // Only call onGraphReady once to avoid re-triggering
+    if (!readyCalledRef.current) {
+      readyCalledRef.current = true;
+      onGraphReady();
+    }
   }, [DEFAULT_CAMERA, onGraphReady]);
 
   return (
